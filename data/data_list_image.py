@@ -13,10 +13,7 @@ def make_dataset(image_list, labels):
       len_ = len(image_list)
       images = [(image_list[i].strip(), labels[i, :]) for i in range(len_)]
     else:
-      if len(image_list[0].split()) > 2:
-        images = [(val.split()[0], np.array([int(la) for la in val.split()[1:]])) for val in image_list]
-      else:
-        images = [(val.split()[0], int(val.split()[1])) for val in image_list]
+        images = [(val.split()[0], int(val.split()[1]), int(val.split()[2])) for val in image_list]
     return images
 
 
@@ -46,14 +43,14 @@ class ImageList(Dataset):
             self.loader = l_loader
 
     def __getitem__(self, index):
-        path, target = self.imgs[index]
+        path, target, domain = self.imgs[index]
         img = self.loader(path)
         if self.transform is not None:
             img = self.transform(img)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return img, target
+        return img, target, domain
 
     def __len__(self):
         return len(self.imgs)
@@ -75,14 +72,14 @@ class ImageListIndex(Dataset):
             self.loader = l_loader
 
     def __getitem__(self, index):
-        path, target = self.imgs[index]
+        path, target, domain = self.imgs[index]
         img = self.loader(path)
         if self.transform is not None:
             img = self.transform(img)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return img, target, index
+        return img, target, domain, index
 
     def __len__(self):
         return len(self.imgs)

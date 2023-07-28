@@ -26,22 +26,27 @@ def im(outputs_test, gent=True):
     return im_loss
 
 
-def adv(features, ad_net):
+def adv(features, domain, ad_net):
     ad_out = ad_net(features)
-    batch_size = ad_out.size(0) // 2
-    dc_target = torch.from_numpy(np.array([[1]] * batch_size + [[0]] * batch_size)).float().to(features.device)
+    # batch_size = ad_out.size(0) // 2
+    # dc_target = torch.from_numpy(np.array([[1]] * batch_size + [[0]] * batch_size)).float().to(features.device)
+    dc_target = domain
     return torch.nn.BCELoss()(ad_out, dc_target)
 
 
-def adv_local(features, ad_net, is_source=False, weights=None):
+def adv_local(features, domain, ad_net, is_source=False, weights=None):
     ad_out = ad_net(features).squeeze(3)
     batch_size = ad_out.size(0)
     num_heads = ad_out.size(1)
     seq_len = ad_out.size(2)
     
-    if is_source:
-        label = torch.from_numpy(np.array([[[1]*seq_len]*num_heads] * batch_size)).float().to(features.device)
+    # if is_source:
+    #     label = torch.from_numpy(np.array([[[1]*seq_len]*num_heads] * batch_size)).float().to(features.device)
+    # else:
+    #     label = torch.from_numpy(np.array([[[0]*seq_len]*num_heads] * batch_size)).float().to(features.device)
+    
+    if domain is not None:
+        label = domain.unsqueeze(1).unsqueeze(2).expand(-1, num_heads, seq_len).float()
+        return ad_out, torch.nn.BCELoss()(ad_out, label)
     else:
-        label = torch.from_numpy(np.array([[[0]*seq_len]*num_heads] * batch_size)).float().to(features.device)
-
-    return ad_out, torch.nn.BCELoss()(ad_out, label)
+        return ad_out, None

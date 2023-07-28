@@ -16,9 +16,6 @@ import torch.distributed as dist
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from apex import amp
-from apex.parallel import DistributedDataParallel as DDP
-
 from models.modeling import VisionTransformer, CONFIGS, AdversarialNetwork
 from utils.scheduler import WarmupLinearSchedule, WarmupCosineSchedule
 from utils.data_utils import get_loader
@@ -29,6 +26,108 @@ from utils.utils import visda_acc
 from torchvision import transforms, datasets
 from data.data_list_image import ImageList, ImageListIndex, rgb_loader
 from models import lossZoo
+
+from myfunc import set_determinism, set_logger
+from datetime import datetime
+
+import logging
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--dset", required=True,
+                    help="Name of this run. Used for monitoring.")
+parser.add_argument("--dataset", help="Which downstream task.")
+parser.add_argument("--task", help="Which downstream task.")
+# parser.add_argument("--source_list", help="Path of the training data.")
+# parser.add_argument("--target_list", help="Path of the test data.")
+parser.add_argument("--test_list", help="Path of the test data.")
+# parser.add_argument("--num_classes", default=10, type=int,
+#                     help="Number of classes in the dataset.")
+parser.add_argument("--model_type", choices=["ViT-B_16", "ViT-B_32", "ViT-L_16",
+                                                "ViT-L_32", "ViT-H_14", "R50-ViT-B_16"],
+                    default="ViT-B_16",
+                    help="Which variant to use.")
+parser.add_argument("--pretrained_dir", type=str, default="checkpoint/ViT-B_16.npz",
+                    help="Where to search for pretrained ViT models.")
+parser.add_argument("--output_dir", default="output", type=str,
+                    help="The output directory where checkpoints will be written.")
+
+parser.add_argument("--img_size", default=224, type=int,
+                    help="Resolution size")
+parser.add_argument("--train_batch_size", default=16, type=int,
+                    help="Total batch size for training.")
+parser.add_argument("--eval_batch_size", default=16, type=int,
+                    help="Total batch size for eval.")
+parser.add_argument("--eval_every", default=100, type=int,
+                    help="Run prediction on validation set every so many steps."
+                            "Will always run one evaluation at the end of training.")
+
+parser.add_argument("--beta", default=0.1, type=float,
+                    help="The importance of the adversarial loss.")
+parser.add_argument("--gamma", default=0.1, type=float,
+                    help="The importance of the local adversarial loss.")
+parser.add_argument("--theta", default=1.0, type=float,
+                    help="The importance of the IM loss.")
+parser.add_argument("--use_im", default=False, action="store_true",
+                    help="Use information maximization loss.")
+parser.add_argument("--msa_layer", default=12, type=int,
+                    help="The layer that incorporates local alignment.")
+parser.add_argument("--is_test", default=False, action="store_true",
+                    help="If in test mode.")
+
+parser.add_argument("--learning_rate", default=3e-2, type=float,
+                    help="The initial learning rate for SGD.")
+parser.add_argument("--weight_decay", default=0, type=float,
+                    help="Weight deay if we apply some.")
+parser.add_argument("--num_steps", default=10000, type=int,
+                    help="Total number of training epochs to perform.")
+parser.add_argument("--decay_type", choices=["cosine", "linear"], default="cosine",
+                    help="How to decay the learning rate.")
+parser.add_argument("--warmup_steps", default=500, type=int,
+                    help="Step of training to perform learning rate warmup for.")
+parser.add_argument("--max_grad_norm", default=1.0, type=float,
+                    help="Max gradient norm.")
+
+parser.add_argument("--local_rank", type=int, default=-1,
+                    help="local_rank for distributed training on gpus")
+parser.add_argument('--seed', type=int, default=42,
+                    help="random seed for initialization")
+parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                    help="Number of updates steps to accumulate before performing a backward/update pass.")
+parser.add_argument('--fp16', action='store_true',
+                    help="Whether to use 16-bit float precision instead of 32-bit")
+parser.add_argument('--fp16_opt_level', type=str, default='O2',
+                    help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                            "See details at https://nvidia.github.io/apex/amp.html")
+parser.add_argument('--loss_scale', type=float, default=0,
+                    help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
+                            "0 (default value): dynamic loss scaling.\n"
+                            "Positive power of 2: static loss scaling value.\n")
+args = parser.parse_args()
+
+args.text_path = f'data/{args.dataset}/{args.task}'
+args.labeled_path = f'data/{args.dataset}/{args.task}/{args.dset}/labeled.txt'
+args.unlabeled_path = f'data/{args.dataset}/{args.task}/{args.dset}/unlabeled.txt'
+args.test_path = f'data/{args.dataset}/{args.task}/{args.dset}/test.txt'
+
+if args.dataset == 'office':
+    args.num_classes = 31
+elif args.dataset == 'home':
+    args.num_classes = 65
+else:
+    raise NotImplementedError
+
+set_determinism()
+cuda = ''.join([str(i) for i in os.environ['CUDA_VISIBLE_DEVICES']]) if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 0
+exec_num = os.environ['exec_num'] if 'exec_num' in os.environ.keys() else 0
+now = datetime.now().strftime("%y%m%d_%H:%M:%S")
+args.log_dir = f'logs/{args.dataset}/{args.task}/{now}--c{cuda}n{exec_num}--{args.dset}--{args.task}'
+set_logger(args.log_dir)
+
+# Setup CUDA, GPU & distributed training
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+args.n_gpu = torch.cuda.device_count()
+args.device = device
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +157,11 @@ def simple_accuracy(preds, labels):
 def save_model(args, model, is_adv=False):
     model_to_save = model.module if hasattr(model, 'module') else model
     if not is_adv:
-        model_checkpoint = os.path.join(args.output_dir, args.dataset, "%s_checkpoint.bin" % args.name)
+        model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint.bin" % args.dset)
     else:
-        model_checkpoint = os.path.join(args.output_dir, args.dataset, "%s_checkpoint_adv.bin" % args.name)
+        model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint_adv.bin" % args.dset)
     torch.save(model_to_save.state_dict(), model_checkpoint)
-    logger.info("Saved model checkpoint to [DIR: %s]", os.path.join(args.output_dir, args.dataset))
+    logger.info("Saved model checkpoint to [DIR: %s]", os.path.join(args.log_dir))
 
 
 def setup(args):
@@ -112,7 +211,7 @@ def valid(args, model, ad_net, writer, test_loader, global_step):
     loss_fct = torch.nn.CrossEntropyLoss()
     for step, batch in enumerate(epoch_iterator):
         batch = tuple(t.to(args.device) for t in batch)
-        x, y = batch
+        x, y, _ = batch
         with torch.no_grad():
             logits, _, _ = model(x, ad_net=ad_net)
 
@@ -140,7 +239,7 @@ def valid(args, model, ad_net, writer, test_loader, global_step):
         accuracy = simple_accuracy(all_preds, all_label)
 
     logger.info("\n")
-    logger.info("Validation Results of: %s" % args.name)
+    logger.info("Validation Results of: %s" % args.dset)
     logger.info("Global Steps: %d" % global_step)
     logger.info("Valid Loss: %2.5f" % eval_losses.avg)
     logger.info("Valid Accuracy: %2.5f" % accuracy)
@@ -154,23 +253,23 @@ def valid(args, model, ad_net, writer, test_loader, global_step):
 
 def train(args, model):
     if args.local_rank in [-1, 0]:
-        os.makedirs(os.path.join(args.output_dir, args.dataset), exist_ok=True)
-        writer = SummaryWriter(log_dir=os.path.join("logs", args.dataset, args.name))
+        # os.makedirs(os.path.join(args.output_dir, args.dataset), exist_ok=True)
+        writer = SummaryWriter(log_dir=args.log_dir)
 
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
     # Prepare dataset
     transform_source, transform_target, transform_test = get_transform(args.dataset, args.img_size)
     source_loader = torch.utils.data.DataLoader(
-        ImageList(open(args.source_list).readlines(), transform=transform_source, mode='RGB'),
+        ImageList(open(args.labeled_path).readlines(), transform=transform_source, mode='RGB'),
         batch_size=args.train_batch_size, shuffle=True, num_workers=4)
     
     target_loader = torch.utils.data.DataLoader(
-        ImageListIndex(open(args.target_list).readlines(), transform=transform_target, mode='RGB'),
+        ImageListIndex(open(args.unlabeled_path).readlines(), transform=transform_target, mode='RGB'),
         batch_size=args.train_batch_size, shuffle=True, num_workers=4)
 
     test_loader = torch.utils.data.DataLoader(
-        ImageList(open(args.test_list).readlines(), transform=transform_test, mode='RGB'),
+        ImageList(open(args.test_path).readlines(), transform=transform_test, mode='RGB'),
         batch_size=args.eval_batch_size, shuffle=False, num_workers=4)
     
     config = CONFIGS[args.model_type]
@@ -223,18 +322,18 @@ def train(args, model):
         if (global_step-1) % (len_target-1) == 0:
             iter_target = iter(target_loader)
         
-        data_source = iter_source.next()
-        data_target = iter_target.next()
+        data_source = next(iter_source)
+        data_target = next(iter_target)
 
-        x_s, y_s = tuple(t.to(args.device) for t in data_source)
-        x_t, _, index_t = tuple(t.to(args.device) for t in data_target)
-        logits_s, logits_t, loss_ad_local, loss_rec, x_s, x_t = model(x_s, x_t, ad_net_local)
+        x_s, y_s, domain_s = tuple(t.to(args.device) for t in data_source)
+        x_t, _, domain_t, index_t = tuple(t.to(args.device) for t in data_target)
+        logits_s, logits_t, loss_ad_local, loss_rec, x_s, x_t = model(x_s, domain_s, x_t, domain_t, ad_net_local)
 
         loss_fct = CrossEntropyLoss()
         loss_clc = loss_fct(logits_s.view(-1, args.num_classes), y_s.view(-1))
         
         loss_im = lossZoo.im(logits_t.view(-1, args.num_classes))
-        loss_ad_global = lossZoo.adv(torch.cat((x_s[:,0], x_t[:,0]), 0), ad_net)
+        loss_ad_global = lossZoo.adv(torch.cat((x_s[:,0], x_t[:,0]), 0), torch.cat((domain_s, domain_t)).unsqueeze(-1).float(), ad_net)
         loss = loss_clc + args.beta * loss_ad_global + args.gamma * loss_ad_local
 
         if args.use_im:
@@ -266,8 +365,8 @@ def train(args, model):
         if global_step % args.eval_every == 0 and args.local_rank in [-1, 0]:
             accuracy, classWise_acc = valid(args, model, ad_net_local, writer, test_loader, global_step)
             if best_acc < accuracy:
-                save_model(args, model)
-                save_model(args, ad_net_local, is_adv=True)
+                # save_model(args, model)
+                # save_model(args, ad_net_local, is_adv=True)
                 best_acc = accuracy
 
                 if classWise_acc is not None:
@@ -284,83 +383,7 @@ def train(args, model):
     logger.info("End Training!")
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name", required=True,
-                        help="Name of this run. Used for monitoring.")
-    parser.add_argument("--dataset", help="Which downstream task.")
-    parser.add_argument("--source_list", help="Path of the training data.")
-    parser.add_argument("--target_list", help="Path of the test data.")
-    parser.add_argument("--test_list", help="Path of the test data.")
-    parser.add_argument("--num_classes", default=10, type=int,
-                        help="Number of classes in the dataset.")
-    parser.add_argument("--model_type", choices=["ViT-B_16", "ViT-B_32", "ViT-L_16",
-                                                 "ViT-L_32", "ViT-H_14", "R50-ViT-B_16"],
-                        default="ViT-B_16",
-                        help="Which variant to use.")
-    parser.add_argument("--pretrained_dir", type=str, default="checkpoint/ViT-B_16.npz",
-                        help="Where to search for pretrained ViT models.")
-    parser.add_argument("--output_dir", default="output", type=str,
-                        help="The output directory where checkpoints will be written.")
-
-    parser.add_argument("--img_size", default=224, type=int,
-                        help="Resolution size")
-    parser.add_argument("--train_batch_size", default=512, type=int,
-                        help="Total batch size for training.")
-    parser.add_argument("--eval_batch_size", default=64, type=int,
-                        help="Total batch size for eval.")
-    parser.add_argument("--eval_every", default=100, type=int,
-                        help="Run prediction on validation set every so many steps."
-                             "Will always run one evaluation at the end of training.")
-
-    parser.add_argument("--beta", default=0.1, type=float,
-                        help="The importance of the adversarial loss.")
-    parser.add_argument("--gamma", default=0.1, type=float,
-                        help="The importance of the local adversarial loss.")
-    parser.add_argument("--theta", default=1.0, type=float,
-                        help="The importance of the IM loss.")
-    parser.add_argument("--use_im", default=False, action="store_true",
-                        help="Use information maximization loss.")
-    parser.add_argument("--msa_layer", default=12, type=int,
-                        help="The layer that incorporates local alignment.")
-    parser.add_argument("--is_test", default=False, action="store_true",
-                        help="If in test mode.")
-
-    parser.add_argument("--learning_rate", default=3e-2, type=float,
-                        help="The initial learning rate for SGD.")
-    parser.add_argument("--weight_decay", default=0, type=float,
-                        help="Weight deay if we apply some.")
-    parser.add_argument("--num_steps", default=10000, type=int,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--decay_type", choices=["cosine", "linear"], default="cosine",
-                        help="How to decay the learning rate.")
-    parser.add_argument("--warmup_steps", default=500, type=int,
-                        help="Step of training to perform learning rate warmup for.")
-    parser.add_argument("--max_grad_norm", default=1.0, type=float,
-                        help="Max gradient norm.")
-
-    parser.add_argument("--local_rank", type=int, default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--seed', type=int, default=42,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument('--fp16', action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--fp16_opt_level', type=str, default='O2',
-                        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-                             "See details at https://nvidia.github.io/apex/amp.html")
-    parser.add_argument('--loss_scale', type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-    args = parser.parse_args()
-
-    # Setup CUDA, GPU & distributed training
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    args.n_gpu = torch.cuda.device_count()
-    args.device = device
-
+def main(args):
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S',
@@ -378,4 +401,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(args)

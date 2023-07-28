@@ -37,8 +37,8 @@ def get_transform(dataset, img_size):
             ])
     else:
         transform_source = transforms.Compose([
-                transforms.Resize((img_size+32, img_size+32)),
-                transforms.RandomCrop(img_size),
+                transforms.Resize((img_size, img_size)),
+                # transforms.RandomCrop(img_size),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 Normalize(meanfile='./data/ilsvrc_2012_mean.npy')

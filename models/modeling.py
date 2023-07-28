@@ -84,7 +84,7 @@ class Attention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, posi_emb=None, ad_net=None, is_source=False):
+    def forward(self, hidden_states, domain, posi_emb=None, ad_net=None, is_source=False):
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -101,7 +101,7 @@ class Attention(nn.Module):
             eps=1e-10
             batch_size = key_layer.size(0)
             patch = key_layer
-            ad_out, loss_ad = lossZoo.adv_local(patch[:,:,1:], ad_net, is_source)
+            ad_out, loss_ad = lossZoo.adv_local(patch[:,:,1:], domain, ad_net, is_source)
             entropy = - ad_out * torch.log2(ad_out + eps) - (1.0 - ad_out) * torch.log2(1.0 - ad_out + eps)
             entropy = torch.cat((torch.ones(batch_size, self.num_attention_heads, 1).to(hidden_states.device).float(), entropy), 2)
             trans_ability = entropy if self.vis else None   # [B*12*197]
@@ -204,13 +204,13 @@ class Block(nn.Module):
         self.ffn = Mlp(config)
         self.attn = Attention(config, vis)
 
-    def forward(self, x, posi_emb=None, ad_net=None, is_source=False):
+    def forward(self, x, domain, posi_emb=None, ad_net=None, is_source=False):
         h = x
         x = self.attention_norm(x)
         if posi_emb is not None:
-            x, loss_ad, weights, tran_weights = self.attn(x, posi_emb, ad_net, is_source)
+            x, loss_ad, weights, tran_weights = self.attn(x, domain, posi_emb, ad_net, is_source)
         else:
-            x, weights = self.attn(x)
+            x, weights = self.attn(x, domain)
         x = x + h
 
         h = x
@@ -272,13 +272,13 @@ class Encoder(nn.Module):
             layer = Block(config, vis)
             self.layer.append(copy.deepcopy(layer))
 
-    def forward(self, hidden_states, posi_emb, ad_net, is_source=False):
+    def forward(self, hidden_states, domain, posi_emb, ad_net, is_source=False):
         attn_weights = []
         for i, layer_block in enumerate(self.layer):
             if i == (self.msa_layer-1):
-                hidden_states, loss_ad, weights, tran_weights = layer_block(hidden_states, posi_emb, ad_net, is_source)
+                hidden_states, loss_ad, weights, tran_weights = layer_block(hidden_states, domain, posi_emb, ad_net, is_source)
             else:
-                hidden_states, weights = layer_block(hidden_states)
+                hidden_states, weights = layer_block(hidden_states, domain)
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
@@ -291,9 +291,9 @@ class Transformer(nn.Module):
         self.embeddings = Embeddings(config, img_size=img_size)
         self.encoder = Encoder(config, vis, msa_layer)
     
-    def forward(self, input_ids, ad_net, is_source=False):
+    def forward(self, input_ids, domain, ad_net, is_source=False):
         embedding_output, posi_emb = self.embeddings(input_ids)
-        encoded, loss_ad, attn_weights, tran_weights = self.encoder(embedding_output, posi_emb, ad_net, is_source)
+        encoded, loss_ad, attn_weights, tran_weights = self.encoder(embedding_output, domain, posi_emb, ad_net, is_source)
         return encoded, loss_ad, attn_weights, tran_weights
 
 
@@ -326,13 +326,14 @@ class VisionTransformer(nn.Module):
         self.head = Linear(config.hidden_size, num_classes)
         self.decoder = Decoder(config.hidden_size)
     
-    def forward(self, x_s, x_t=None, ad_net=None):
-        x_s, loss_ad_s, attn_s, tran_s = self.transformer(x_s, ad_net, is_source=True)
+    def forward(self, x_s, domain_s=None, x_t=None, domain_t=None, ad_net=None):
+        x_s, loss_ad_s, attn_s, tran_s = self.transformer(x_s, domain_s, ad_net, is_source=True)
         logits_s = self.head(x_s[:, 0])
+
         
         if x_t is not None:
             xt_unfold = F.unfold(x_t, kernel_size=16, stride=16)
-            x_t, loss_ad_t, _, _ = self.transformer(x_t, ad_net)
+            x_t, loss_ad_t, _, _ = self.transformer(x_t, domain_t, ad_net)
             logits_t = self.head(x_t[:, 0])
 
             rec_t = self.decoder(x_t[:, 1:])
@@ -400,7 +401,7 @@ class VisionTransformer(nn.Module):
 
 
 def calc_coeff(iter_num, high=1.0, low=0.0, alpha=10.0, max_iter=10000.0):
-    return np.float(2.0 * (high - low) / (1.0 + np.exp(-alpha*iter_num / max_iter)) - (high - low) + low)
+    return np.float32(2.0 * (high - low) / (1.0 + np.exp(-alpha*iter_num / max_iter)) - (high - low) + low)
 
 
 def init_weights(m):
