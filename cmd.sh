@@ -5,7 +5,7 @@ function process_args {
     local dset_num=$3
 
     # 残りの名前付き引数を解析
-    local dataset="office"
+    local dataset="home"
     if [ $dataset = 'office' ]; then
         local task=(
             "original_uda"
@@ -17,8 +17,8 @@ function process_args {
         local task=(
             # "original_uda"
             "true_domains"
-            "simclr_rpl_uniform_dim512_wght0.5_bs512_ep300_g3_encoder_outdim64_shfl"
-            "simclr_bs512_ep300_g3_shfl"
+            "simclr_rpl_dim128_wght0.5_bs512_ep3000_g3_encoder_outdim64_shfl"
+            "simclr_bs512_ep1000_g3_shfl"
         )
     fi
 
