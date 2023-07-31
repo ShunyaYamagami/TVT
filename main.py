@@ -104,14 +104,14 @@ parser.add_argument('--loss_scale', type=float, default=0,
                             "Positive power of 2: static loss scaling value.\n")
 args = parser.parse_args()
 
-args.text_path = f'data/{args.dataset}/{args.task}'
-args.labeled_path = f'data/{args.dataset}/{args.task}/{args.dset}/labeled.txt'
-args.unlabeled_path = f'data/{args.dataset}/{args.task}/{args.dset}/unlabeled.txt'
-args.test_path = f'data/{args.dataset}/{args.task}/{args.dset}/test.txt'
+args.text_path = os.path.join('/nas/data/syamagami/GDA/data/GDA_DA_methods/data', args.dataset, args.task, args.dset)
+args.labeled_path = os.path.join(args.text_path, 'labeled.txt')
+args.unlabeled_path = os.path.join(args.text_path, 'unlabeled.txt')
+args.test_path = os.path.join(args.text_path, 'test.txt')
 
-if args.dataset == 'office':
+if args.dataset == 'Office31':
     args.num_classes = 31
-elif args.dataset == 'home':
+elif args.dataset == 'OfficeHome':
     args.num_classes = 65
 else:
     raise NotImplementedError

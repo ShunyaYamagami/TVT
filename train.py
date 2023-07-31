@@ -262,7 +262,7 @@ def test(args):
     transform_test = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor(),
-        Normalize(meanfile='./data/ilsvrc_2012_mean.npy')
+        Normalize(meanfile='/nas/data/syamagami/GDA/data/GDA_DA_methods/data/ilsvrc_2012_mean.npy')
     ])
     test_loader = torch.utils.data.DataLoader(
         ImageList(open(args.test_list).readlines(), transform=transform_test, mode='RGB'),

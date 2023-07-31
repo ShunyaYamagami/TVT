@@ -5,15 +5,17 @@ function process_args {
     local dset_num=$3
 
     # 残りの名前付き引数を解析
-    local dataset="home"
-    if [ $dataset = 'office' ]; then
+    local dataset="Office31"
+    if [ $dataset = 'Office31' ]; then
         local task=(
-            "original_uda"
-            "true_domains"
-            "simclr_rpl_uniform_dim512_wght0.5_bs512_ep300_g3_encoder_outdim64_shfl"
-            "simclr_bs512_ep300_g3_shfl"
+            # "original_uda"
+            # "true_domains"
+            # "simclr_rpl_uniform_dim512_wght0.5_bs512_ep300_g3_encoder_outdim64_shfl"
+            # "simclr_bs512_ep300_g3_shfl"
+            # "simple_bs512_ep300_g3_AE_outd64_shfl"
+            "contrastive_rpl_dim512_wght0.6_AE_bs256_ep300_outd64_g3"
         )
-    elif [ $dataset = 'home' ]; then
+    elif [ $dataset = 'OfficeHome' ]; then
         local task=(
             # "original_uda"
             "true_domains"
@@ -28,9 +30,9 @@ function process_args {
     echo -e ''
 
     ##### データセット設定
-    if [ $dataset = 'office' ]; then
+    if [ $dataset = 'Office31' ]; then
         dsetlist=("amazon_dslr" "webcam_amazon" "dslr_webcam")
-    elif [ $dataset = 'home' ]; then
+    elif [ $dataset = 'OfficeHome' ]; then
         dsetlist=("Art_Clipart" "Art_Product" "Art_RealWorld" "Clipart_Product" "Clipart_RealWorld" "Product_RealWorld")
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
