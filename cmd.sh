@@ -61,6 +61,9 @@ function process_args {
             "contrastive_rpl_dim128_wght0.6_AE_bs512_ep3000_outd64_g3"
         )
     fi
+    if [ -n "$task_temp" ]; then
+        task=("$task_temp")
+    fi
 
     echo "gpu_i: $gpu_i"
     echo "exec_num: $exec_num"
