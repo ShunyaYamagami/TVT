@@ -113,6 +113,8 @@ if args.dataset == 'Office31':
     args.num_classes = 31
 elif args.dataset == 'OfficeHome':
     args.num_classes = 65
+elif args.dataset == 'DomainNet':
+    args.num_classes = 345
 else:
     raise NotImplementedError
 
