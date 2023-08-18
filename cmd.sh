@@ -86,12 +86,6 @@ function process_args {
     COMMAND+="conda deactivate && conda deactivate"
     COMMAND+=" && conda activate tvt"
 
-    if [ $dataset = 'DomainNet' ]; then
-        img_size=196
-    else
-        img_size=256
-    fi
-
     for tsk in "${task[@]}"; do
         if [ $dset_num -eq -1 ]; then
             for dset in "${dsetlist[@]}"; do
@@ -107,7 +101,7 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size $img_size
+                    --img_size 256
                 "
             done
         elif [[ $dset_num == *"_"* ]]; then  # アンダーラインが含まれているかチェック
@@ -128,7 +122,7 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size $img_size
+                    --img_size 256
                 "
             done
         
@@ -146,7 +140,7 @@ function process_args {
                 --gamma 0.01 \
                 --use_im \
                 --theta 0.1 \
-                --img_size $img_size
+                --img_size 256
             "
         fi
     done
