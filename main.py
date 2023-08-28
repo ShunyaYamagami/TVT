@@ -4,15 +4,11 @@ from __future__ import absolute_import, division, print_function
 import logging
 import argparse
 import os
-import math
 import random
 import numpy as np
-from PIL import Image
-
-from datetime import timedelta
-
+import json
 import torch
-import torch.distributed as dist
+import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
@@ -58,6 +54,9 @@ parser.add_argument("--train_batch_size", default=16, type=int,
 parser.add_argument("--eval_batch_size", default=16, type=int,
                     help="Total batch size for eval.")
 parser.add_argument("--eval_every", default=100, type=int,
+                    help="Run prediction on validation set every so many steps."
+                            "Will always run one evaluation at the end of training.")
+parser.add_argument("--save_model_every", default=100, type=int,
                     help="Run prediction on validation set every so many steps."
                             "Will always run one evaluation at the end of training.")
 
@@ -125,6 +124,9 @@ now = datetime.now().strftime("%y%m%d_%H:%M:%S")
 args.log_dir = f'logs/{args.dataset}/{args.task}/{now}--c{cuda}n{exec_num}--{args.dset}--{args.task}'
 set_logger(args.log_dir)
 
+with open(os.path.join(args.log_dir, 'args.json'), 'w') as f:
+    json.dump(vars(args), f, indent=4)
+        
 # Setup CUDA, GPU & distributed training
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.n_gpu = torch.cuda.device_count()
@@ -156,14 +158,14 @@ def simple_accuracy(preds, labels):
     return (preds == labels).mean()
 
 
-def save_model(args, model, is_adv=False):
-    model_to_save = model.module if hasattr(model, 'module') else model
-    if not is_adv:
-        model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint.bin" % args.dset)
-    else:
-        model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint_adv.bin" % args.dset)
-    torch.save(model_to_save.state_dict(), model_checkpoint)
-    logger.info("Saved model checkpoint to [DIR: %s]", os.path.join(args.log_dir))
+# def save_model(args, model, is_adv=False):
+#     model_to_save = model.module if hasattr(model, 'module') else model
+#     if not is_adv:
+#         model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint.bin" % args.dset)
+#     else:
+#         model_checkpoint = os.path.join(args.log_dir, "%s_checkpoint_adv.bin" % args.dset)
+#     torch.save(model_to_save.state_dict(), model_checkpoint)
+#     logger.info("Saved model checkpoint to [DIR: %s]", os.path.join(args.log_dir))
 
 
 def setup(args):
@@ -253,7 +255,7 @@ def valid(args, model, ad_net, writer, test_loader, global_step):
         return accuracy, None
 
 
-def train(args, model):
+def train(args, model: nn.Module):
     if args.local_rank in [-1, 0]:
         # os.makedirs(os.path.join(args.output_dir, args.dataset), exist_ok=True)
         writer = SummaryWriter(log_dir=args.log_dir)
@@ -369,6 +371,19 @@ def train(args, model):
             if best_acc < accuracy:
                 # save_model(args, model)
                 # save_model(args, ad_net_local, is_adv=True)
+                torch.save({
+                    'global_step': global_step,
+                    'best_acc': best_acc,
+                    'best_classWise_acc': best_classWise_acc,
+                    'model': model.state_dict(),
+                    'ad_net': ad_net.state_dict(),
+                    'ad_net_local': ad_net_local.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    'optimizer_ad': optimizer_ad.state_dict(),
+                    'scheduler_ad': scheduler_ad.state_dict(),
+                    }, os.path.join(args.log_dir, f"best_checkpoint.pth"))
+                
                 best_acc = accuracy
 
                 if classWise_acc is not None:
@@ -377,7 +392,24 @@ def train(args, model):
             ad_net_local.train()
             logger.info("Current Best Accuracy: %2.5f" % best_acc)
             logger.info("Current Best element-wise acc: %s" % best_classWise_acc)
-        
+
+        if global_step % args.save_model_every == 0:
+            logger.info(f"Saving checkpoint at global_step={global_step}")
+            torch.save({
+                'global_step': global_step,
+                'best_acc': best_acc,
+                'best_classWise_acc': best_classWise_acc,
+                'model': model.state_dict(),
+                'ad_net': ad_net.state_dict(),
+                'ad_net_local': ad_net_local.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'optimizer_ad': optimizer_ad.state_dict(),
+                'scheduler_ad': scheduler_ad.state_dict(),
+                }, os.path.join(args.log_dir, f"latest_checkpoint.pth"))
+            logger.info(f"Finihsed saving")
+            
+
     if args.local_rank in [-1, 0]:
         writer.close()
     logger.info("Best Accuracy: \t%f" % best_acc)

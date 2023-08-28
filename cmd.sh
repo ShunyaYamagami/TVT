@@ -6,6 +6,7 @@ function process_args {
 
     # 残りの名前付き引数を解析
     local dataset="OfficeHome"
+    local tmux_session=""
 
 
     local params=$(getopt -n "$0" -o p:c: -l dataset:,prod:,dev:,task_temp:,resume:,ssh_num:,tmux: -- "$@")
