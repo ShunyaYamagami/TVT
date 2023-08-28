@@ -47,13 +47,13 @@ parser.add_argument("--pretrained_dir", type=str, default="checkpoint/ViT-B_16.n
 parser.add_argument("--output_dir", default="output", type=str,
                     help="The output directory where checkpoints will be written.")
 
-parser.add_argument("--img_size", default=224, type=int,
+parser.add_argument("--img_size", default=196, type=int,
                     help="Resolution size")
 parser.add_argument("--train_batch_size", default=16, type=int,
                     help="Total batch size for training.")
 parser.add_argument("--eval_batch_size", default=16, type=int,
                     help="Total batch size for eval.")
-parser.add_argument("--eval_every", default=100, type=int,
+parser.add_argument("--eval_every", default=10, type=int,
                     help="Run prediction on validation set every so many steps."
                             "Will always run one evaluation at the end of training.")
 parser.add_argument("--save_model_every", default=100, type=int,
