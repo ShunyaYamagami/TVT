@@ -316,7 +316,7 @@ def train(args, model: nn.Module):
     len_source = len(source_loader)
     len_target = len(target_loader)            
 
-    for global_step in range(1, t_total):
+    for global_step in tqdm(range(1, t_total)):
         model.train()
         ad_net.train()
         ad_net_local.train()
