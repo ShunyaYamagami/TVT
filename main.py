@@ -101,7 +101,29 @@ parser.add_argument('--loss_scale', type=float, default=0,
                     help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                             "0 (default value): dynamic loss scaling.\n"
                             "Positive power of 2: static loss scaling value.\n")
+parser.add_argument(
+        '--resume',
+        type=str,
+        default=''
+    )  # DoaminNet/true_domains/231003_...
 args = parser.parse_args()
+
+set_determinism()
+
+if args.resume:
+    dataset, task, log_dirname = str(args.resume).split('/')
+    _, _, dset, _ = log_dirname.split('--')
+    setattr(args, 'dataset', dataset)
+    setattr(args, 'task', task)
+    setattr(args, 'dset', dset)
+else:
+    cuda = ''.join([str(i) for i in os.environ['CUDA_VISIBLE_DEVICES']]) if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 0
+    exec_num = os.environ['exec_num'] if 'exec_num' in os.environ.keys() else 0
+    now = datetime.now().strftime("%y%m%d_%H:%M:%S")
+    log_dirname = f'{now}--c{cuda}n{exec_num}--{args.dset}--{args.task}'
+
+args.log_dir = f'logs/{args.dataset}/{args.task}/{log_dirname}'
+set_logger(args.log_dir)
 
 args.text_path = os.path.join('/nas/data/syamagami/GDA/data/GDA_DA_methods/data', args.dataset, args.task, args.dset)
 args.labeled_path = os.path.join(args.text_path, 'labeled.txt')
@@ -117,13 +139,6 @@ elif args.dataset == 'DomainNet':
 else:
     raise NotImplementedError
 
-set_determinism()
-cuda = ''.join([str(i) for i in os.environ['CUDA_VISIBLE_DEVICES']]) if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 0
-exec_num = os.environ['exec_num'] if 'exec_num' in os.environ.keys() else 0
-now = datetime.now().strftime("%y%m%d_%H:%M:%S")
-args.log_dir = f'logs/{args.dataset}/{args.task}/{now}--c{cuda}n{exec_num}--{args.dset}--{args.task}'
-set_logger(args.log_dir)
-
 with open(os.path.join(args.log_dir, 'args.json'), 'w') as f:
     json.dump(vars(args), f, indent=4)
         
@@ -131,7 +146,6 @@ with open(os.path.join(args.log_dir, 'args.json'), 'w') as f:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args.n_gpu = torch.cuda.device_count()
 args.device = device
-
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +181,22 @@ def simple_accuracy(preds, labels):
 #     torch.save(model_to_save.state_dict(), model_checkpoint)
 #     logger.info("Saved model checkpoint to [DIR: %s]", os.path.join(args.log_dir))
 
+def save_model(save_path,
+         global_step, best_acc, best_classWise_acc,
+         model, ad_net, ad_net_local, optimizer, scheduler, optimizer_ad, scheduler_ad,
+    ):
+    torch.save({
+        'global_step': global_step,
+        'best_acc': best_acc,
+        'best_classWise_acc': best_classWise_acc,
+        'model': model.state_dict(),
+        'ad_net': ad_net.state_dict(),
+        'ad_net_local': ad_net_local.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'optimizer_ad': optimizer_ad.state_dict(),
+        'scheduler_ad': scheduler_ad.state_dict(),
+        }, save_path)
 
 def setup(args):
     # Prepare model
@@ -314,16 +344,34 @@ def train(args, model: nn.Module):
     best_classWise_acc = ''
 
     len_source = len(source_loader)
-    len_target = len(target_loader)            
+    len_target = len(target_loader)
 
-    for global_step in tqdm(range(1, t_total)):
+    best_checkpoint_pth = os.path.join(args.log_dir, 'best_checkpoint.pth')
+    latest_checkpoint_pth = os.path.join(args.log_dir, 'latest_checkpoint.pth')
+
+    start_global_step = 1
+
+    if args.resume:
+        checkpoint = torch.load(latest_checkpoint_pth)
+        start_global_step = checkpoint['global_step']
+        best_acc = checkpoint['best_acc']
+        best_classWise_acc = checkpoint['best_classWise_acc']
+        model.load_state_dict(checkpoint['model'])
+        ad_net.load_state_dict(checkpoint['ad_net'])
+        ad_net_local.load_state_dict(checkpoint['ad_net_local'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
+        optimizer_ad.load_state_dict(checkpoint['optimizer_ad'])
+        scheduler_ad.load_state_dict(checkpoint['scheduler_ad'])
+                
+    for global_step in tqdm(range(start_global_step, t_total)):
         model.train()
         ad_net.train()
         ad_net_local.train()
 
-        if (global_step-1) % (len_source-1) == 0:
+        if (global_step-1) % (len_source-1) == 0 or global_step == start_global_step:
             iter_source = iter(source_loader)    
-        if (global_step-1) % (len_target-1) == 0:
+        if (global_step-1) % (len_target-1) == 0 or global_step == start_global_step:
             iter_target = iter(target_loader)
         
         data_source = next(iter_source)
@@ -371,19 +419,10 @@ def train(args, model: nn.Module):
             if best_acc < accuracy:
                 # save_model(args, model)
                 # save_model(args, ad_net_local, is_adv=True)
-                torch.save({
-                    'global_step': global_step,
-                    'best_acc': best_acc,
-                    'best_classWise_acc': best_classWise_acc,
-                    'model': model.state_dict(),
-                    'ad_net': ad_net.state_dict(),
-                    'ad_net_local': ad_net_local.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    'optimizer_ad': optimizer_ad.state_dict(),
-                    'scheduler_ad': scheduler_ad.state_dict(),
-                    }, os.path.join(args.log_dir, f"best_checkpoint.pth"))
-                
+                save_model(best_checkpoint_pth,
+                    global_step, best_acc, best_classWise_acc,
+                    model, ad_net, ad_net_local, optimizer, scheduler, optimizer_ad, scheduler_ad,
+                )
                 best_acc = accuracy
 
                 if classWise_acc is not None:
@@ -395,18 +434,10 @@ def train(args, model: nn.Module):
 
         if global_step % args.save_model_every == 0:
             logger.info(f"Saving checkpoint at global_step={global_step}")
-            torch.save({
-                'global_step': global_step,
-                'best_acc': best_acc,
-                'best_classWise_acc': best_classWise_acc,
-                'model': model.state_dict(),
-                'ad_net': ad_net.state_dict(),
-                'ad_net_local': ad_net_local.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
-                'optimizer_ad': optimizer_ad.state_dict(),
-                'scheduler_ad': scheduler_ad.state_dict(),
-                }, os.path.join(args.log_dir, f"latest_checkpoint.pth"))
+            save_model(latest_checkpoint_pth,
+                global_step, best_acc, best_classWise_acc,
+                model, ad_net, ad_net_local, optimizer, scheduler, optimizer_ad, scheduler_ad,
+            )
             logger.info(f"Finihsed saving")
             
 
@@ -415,8 +446,8 @@ def train(args, model: nn.Module):
     logger.info("Best Accuracy: \t%f" % best_acc)
     logger.info("Best element-wise Accuracy: \t%s" % best_classWise_acc)
     logger.info("End Training!")
-
-
+        
+        
 def main(args):
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',

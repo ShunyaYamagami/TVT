@@ -6,6 +6,7 @@ function process_args {
 
     # 残りの名前付き引数を解析
     local dataset="OfficeHome"
+    local resume=''
     local tmux_session=""
 
 
@@ -20,6 +21,10 @@ function process_args {
                 ;;
             --task_temp)
                 task_temp="$2"
+                shift 2
+                ;;
+            --resume)
+                resume="--resume $2"
                 shift 2
                 ;;
             --tmux)
@@ -82,7 +87,7 @@ function process_args {
         eval_every=100
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
-        num_steps=20000
+        num_steps=12000
         eval_every=2000
     else
         echo "不明なデータセット: $dataset" >&2
@@ -110,7 +115,8 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size 256
+                    --img_size 256 \
+                    $resume
                 "
             done
         elif [[ $dset_num == *"_"* ]]; then  # アンダーラインが含まれているかチェック
@@ -133,7 +139,8 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size 256
+                    --img_size 256 \
+                    $resume
                 "
             done
         
@@ -153,7 +160,8 @@ function process_args {
                 --gamma 0.01 \
                 --use_im \
                 --theta 0.1 \
-                --img_size 256
+                --img_size 256 \
+                $resume
             "
         fi
     done
