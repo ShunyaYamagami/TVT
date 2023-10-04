@@ -87,7 +87,7 @@ function process_args {
         eval_every=100
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
-        num_steps=16000
+        num_steps=20000
         eval_every=2000
     else
         echo "不明なデータセット: $dataset" >&2
@@ -101,7 +101,7 @@ function process_args {
     for tsk in "${task[@]}"; do
         if [ $dset_num -eq -1 ]; then
             for dset in "${dsetlist[@]}"; do
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py \
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
                     --train_batch_size 32 \
                     --eval_batch_size 32 \
                     --eval_every $eval_every \
@@ -115,8 +115,7 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size 256 \
-                    $resume
+                    --img_size 256
                 "
             done
         elif [[ $dset_num == *"_"* ]]; then  # アンダーラインが含まれているかチェック
@@ -125,7 +124,7 @@ function process_args {
             # 配列の各要素をfor文でループ
             for num in "${dset_num_list[@]}"; do
                 dset=${dsetlist[$num]}
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py \
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
                     --train_batch_size 32 \
                     --eval_batch_size 32 \
                     --eval_every $eval_every \
@@ -139,14 +138,13 @@ function process_args {
                     --gamma 0.01 \
                     --use_im \
                     --theta 0.1 \
-                    --img_size 256 \
-                    $resume
+                    --img_size 256
                 "
             done
         
         else
             dset=${dsetlist[$dset_num]}
-            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py \
+            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
                 --train_batch_size 32 \
                 --eval_batch_size 32 \
                 --eval_every $eval_every \
@@ -160,8 +158,7 @@ function process_args {
                 --gamma 0.01 \
                 --use_im \
                 --theta 0.1 \
-                --img_size 256 \
-                $resume
+                --img_size 256
             "
         fi
     done
