@@ -62,9 +62,9 @@ function process_args {
         local task=(
             # "original_uda"
             # "true_domains"
-            # "simclr_rpl_dim128_wght0.5_bs512_ep3000_g3_encoder_outdim64_shfl"
+            # "simclr_rpl_dim124_wght0.5_bs512_ep3000_g3_encoder_outdim64_shfl"
             # "simclr_bs512_ep1000_g3_shfl"
-            "contrastive_rpl_dim128_wght0.6_AE_bs512_ep3000_outd64_g3"
+            "contrastive_rpl_dim124_wght0.6_AE_bs512_ep3000_outd64_g3"
         )
     fi
     if [ -n "$task_temp" ]; then
@@ -101,22 +101,7 @@ function process_args {
     for tsk in "${task[@]}"; do
         if [ $dset_num -eq -1 ]; then
             for dset in "${dsetlist[@]}"; do
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
-                    --train_batch_size 32 \
-                    --eval_batch_size 32 \
-                    --eval_every $eval_every \
-                    --dataset $dataset \
-                    --dset $dset \
-                    --task $tsk \
-                    --model_type ViT-B_16 \
-                    --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz \
-                    --num_steps $num_steps \
-                    --beta 0.1 \
-                    --gamma 0.01 \
-                    --use_im \
-                    --theta 0.1 \
-                    --img_size 256
-                "
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
             done
         elif [[ $dset_num == *"_"* ]]; then  # アンダーラインが含まれているかチェック
             # アンダーラインで文字列を分割
@@ -124,42 +109,12 @@ function process_args {
             # 配列の各要素をfor文でループ
             for num in "${dset_num_list[@]}"; do
                 dset=${dsetlist[$num]}
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
-                    --train_batch_size 32 \
-                    --eval_batch_size 32 \
-                    --eval_every $eval_every \
-                    --dataset $dataset \
-                    --dset $dset \
-                    --task $tsk \
-                    --model_type ViT-B_16 \
-                    --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz \
-                    --num_steps $num_steps \
-                    --beta 0.1 \
-                    --gamma 0.01 \
-                    --use_im \
-                    --theta 0.1 \
-                    --img_size 256
-                "
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
             done
         
         else
             dset=${dsetlist[$dset_num]}
-            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  $resume \
-                --train_batch_size 32 \
-                --eval_batch_size 32 \
-                --eval_every $eval_every \
-                --dataset $dataset \
-                --dset $dset \
-                --task $tsk \
-                --model_type ViT-B_16 \
-                --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz \
-                --num_steps $num_steps \
-                --beta 0.1 \
-                --gamma 0.01 \
-                --use_im \
-                --theta 0.1 \
-                --img_size 256
-            "
+            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
         fi
     done
 

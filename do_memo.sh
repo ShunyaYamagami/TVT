@@ -1,6 +1,23 @@
 cd  ~/lab/gda/da/TVT
+. cmd.sh  0 0 8_9_10_11_12_13_14  --task simclr_encoder_bs512_ep2000_lr0.001_outd64_g3  --dataset DomainNet  --tmux TVT_DomainNet_0
 
-# やり直し
-. cmd.sh  1 0 0  --task true_domains  --dataset DomainNet  --resume DomainNet/true_domains/231003_09:59:36--c1n0--clipart_infograph--true_domains  --tmux TVT_DomainNet_1
-. cmd.sh  1 0 2_3_4_5_6_7_8_9  --task true_domains  --dataset DomainNet  --tmux TVT_DomainNet_1
-. cmd.sh  0 0 13_12_11  --task true_domains  --dataset DomainNet  --tmux TVT_DomainNet_0
+cd  ~/lab/gda/da/TVT
+. cmd.sh  1 0 7_8_9_10_11_12_13_14  --task contrastive_rpl_dim128_wght0.6_AE_bs512_ep2000_lr0.001_outd64_g3  --dataset DomainNet  --tmux TVT_DomainNet_1
+
+
+
+# ci 0
+# cp 1
+# cq 2
+# cr 3
+# cs 4
+# ip 5
+# iq 6
+# ir 7
+# is 8
+# pq 9
+# pr 10
+# ps 11
+# qr 12
+# qs 13
+# rs 14
