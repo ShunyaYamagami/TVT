@@ -81,14 +81,17 @@ function process_args {
         dsetlist=("amazon_dslr" "webcam_amazon" "dslr_webcam")
         num_steps=5000
         eval_every=100
+        batch_size=24
     elif [ $dataset = 'OfficeHome' ]; then
         dsetlist=("Art_Clipart" "Art_Product" "Art_RealWorld" "Clipart_Product" "Clipart_RealWorld" "Product_RealWorld")
         num_steps=5000
         eval_every=100
+        batch_size=24
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
         num_steps=20000
         eval_every=2000
+        batch_size=24
     else
         echo "不明なデータセット: $dataset" >&2
         return 1
@@ -101,7 +104,7 @@ function process_args {
     for tsk in "${task[@]}"; do
         if [ $dset_num -eq -1 ]; then
             for dset in "${dsetlist[@]}"; do
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size $batch_size  --eval_batch_size $batch_size  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
             done
         elif [[ $dset_num == *"_"* ]]; then  # アンダーラインが含まれているかチェック
             # アンダーラインで文字列を分割
@@ -109,12 +112,12 @@ function process_args {
             # 配列の各要素をfor文でループ
             for num in "${dset_num_list[@]}"; do
                 dset=${dsetlist[$num]}
-                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
+                COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size $batch_size  --eval_batch_size $batch_size  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
             done
         
         else
             dset=${dsetlist[$dset_num]}
-            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size 24  --eval_batch_size 24  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
+            COMMAND+=" && CUDA_VISIBLE_DEVICES=$gpu_i  python3 main.py  --train_batch_size $batch_size  --eval_batch_size $batch_size  --eval_every $eval_every  --dataset $dataset  --dset $dset  --task $tsk  --model_type ViT-B_16  --pretrained_dir checkpoint/imagenet21k_ViT-B_16.npz  --num_steps $num_steps  --beta 0.1  --gamma 0.01  --use_im  --theta 0.1  --img_size 256  $resume "
         fi
     done
 
