@@ -89,7 +89,7 @@ function process_args {
         batch_size=24
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
-        num_steps=25000
+        num_steps=24000
         eval_every=2000
         batch_size=24
     else
