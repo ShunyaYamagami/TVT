@@ -87,7 +87,7 @@ function process_args {
         eval_every=100
     elif [ $dataset = 'DomainNet' ]; then
         dsetlist=('clipart_infograph' 'clipart_painting' 'clipart_quickdraw' 'clipart_real' 'clipart_sketch' 'infograph_painting' 'infograph_quickdraw' 'infograph_real' 'infograph_sketch' 'painting_quickdraw' 'painting_real' 'painting_sketch' 'quickdraw_real' 'quickdraw_sketch' 'real_sketch')
-        num_steps=20000
+        num_steps=25000
         eval_every=2000
     else
         echo "不明なデータセット: $dataset" >&2
